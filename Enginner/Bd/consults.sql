@@ -86,11 +86,11 @@ JOIN MaxLecturas ml ON ll.idLector = ml.idLector AND ll.veces_leido = ml.max_lei
 
 
 -- lista de libros que se han prestado en un rango de fechas
-SELECT DISTINCT l.Titulo, COUNT(*) AS veces_prestado
+SELECT l.Titulo, COUNT(dp.Libro_idLibro) AS veces_prestado
 FROM Libro l
 JOIN Detalle_Prestamo dp ON l.idLibro = dp.Libro_idLibro
 JOIN Prestamo p ON dp.Prestamo_id_Prestamo = p.id_Prestamo
-WHERE p.Fecha_Prestamo BETWEEN 'YYYY-MM-DD' AND 'YYYY-MM-DD'
+WHERE p.Fecha_Prestamo BETWEEN '2024-01-01' AND '2024-12-31'
 GROUP BY l.idLibro, l.Titulo
 HAVING veces_prestado > 0;
 
