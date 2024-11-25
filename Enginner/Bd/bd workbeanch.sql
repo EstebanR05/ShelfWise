@@ -2,7 +2,7 @@ CREATE SCHEMA `shelfwise` ;
 USE `shelfwise` ;
 
 CREATE TABLE `shelfwise`.`Autor` (
-  `idAutor` INT NOT NULL,
+  `idAutor` INT NOT NULL AUTO_INCREMENT,
   `Primer_Nombre` VARCHAR(45) NOT NULL,
   `Segundo_Nombre` VARCHAR(45) NULL,
   `Primer_Apellido` VARCHAR(45) NOT NULL,

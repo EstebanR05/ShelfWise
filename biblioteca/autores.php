@@ -17,7 +17,7 @@ $error = '';
 
 // Crear o actualizar autor
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $id = isset($_POST['id']) ? $_POST['id'] : null;
+    $id = isset($_POST['id']) ? intval($_POST['id']) : null;
     $primer_nombre = limpiar_dato($_POST['primer_nombre']);
     $segundo_nombre = limpiar_dato($_POST['segundo_nombre']);
     $primer_apellido = limpiar_dato($_POST['primer_apellido']);
@@ -29,14 +29,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $sql = "UPDATE Autor SET Primer_Nombre = ?, Segundo_Nombre = ?, Primer_Apellido = ?, Segundo_Apellido = ? WHERE idAutor = ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$primer_nombre, $segundo_nombre, $primer_apellido, $segundo_apellido, $id]);
+            $mensaje = "Autor actualizado exitosamente.";
         } else {
             // Crear
             $sql = "INSERT INTO Autor (Primer_Nombre, Segundo_Nombre, Primer_Apellido, Segundo_Apellido) 
                     VALUES (?, ?, ?, ?)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$primer_nombre, $segundo_nombre, $primer_apellido, $segundo_apellido]);
+            $mensaje = "Autor creado exitosamente.";
         }
-        $mensaje = "Autor guardado exitosamente.";
     } catch (PDOException $e) {
         $error = "Error en la base de datos: " . $e->getMessage();
     }
@@ -44,7 +45,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Eliminar autor
 if (isset($_GET['eliminar'])) {
-    $id = $_GET['eliminar'];
+    $id = intval($_GET['eliminar']);
     try {
         $sql = "DELETE FROM Autor WHERE idAutor = ?";
         $stmt = $pdo->prepare($sql);
@@ -57,7 +58,7 @@ if (isset($_GET['eliminar'])) {
 
 // Listar autores
 try {
-    $sql = "SELECT * FROM Autor";
+    $sql = "SELECT * FROM Autor ORDER BY Primer_Apellido, Primer_Nombre";
     $stmt = $pdo->query($sql);
     $autores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -130,12 +131,12 @@ try {
                     <tbody>
                         <?php foreach ($autores as $autor): ?>
                             <tr>
-                                <td><?php echo $autor['idAutor']; ?></td>
-                                <td><?php echo $autor['Primer_Nombre'] . ' ' . $autor['Segundo_Nombre']; ?></td>
-                                <td><?php echo $autor['Primer_Apellido'] . ' ' . $autor['Segundo_Apellido']; ?></td>
+                                <td><?php echo htmlspecialchars($autor['idAutor']); ?></td>
+                                <td><?php echo htmlspecialchars($autor['Primer_Nombre'] . ' ' . $autor['Segundo_Nombre']); ?></td>
+                                <td><?php echo htmlspecialchars($autor['Primer_Apellido'] . ' ' . $autor['Segundo_Apellido']); ?></td>
                                 <td>
                                     <button class="btn btn-warning btn-sm editar-autor" data-bs-toggle="modal" data-bs-target="#autorModal"
-                                        data-autor='<?php echo json_encode($autor); ?>'>Editar</button>
+                                        data-autor='<?php echo json_encode($autor, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>Editar</button>
                                     <button class="btn btn-danger btn-sm eliminar-autor"
                                         data-id="<?php echo $autor['idAutor']; ?>">Eliminar</button>
                                 </td>
@@ -200,9 +201,9 @@ try {
                     modalTitle.textContent = 'Editar Autor';
                     document.getElementById('idAutor').value = autor.idAutor;
                     document.getElementById('primer_nombre').value = autor.Primer_Nombre;
-                    document.getElementById('segundo_nombre').value = autor.Segundo_Nombre;
+                    document.getElementById('segundo_nombre').value = autor.Segundo_Nombre || '';
                     document.getElementById('primer_apellido').value = autor.Primer_Apellido;
-                    document.getElementById('segundo_apellido').value = autor.Segundo_Apellido;
+                    document.getElementById('segundo_apellido').value = autor.Segundo_Apellido || '';
                 } else {
                     modalTitle.textContent = 'Agregar Autor';
                     autorForm.reset();
