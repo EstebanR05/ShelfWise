@@ -138,11 +138,26 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - ShelfWise</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.25/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .table-container {
+            height: 300px;
+            overflow: auto;
+        }
+        .dataTables_wrapper {
+            height: 100%;
+        }
+        .dataTables_scrollBody {
+            max-height: calc(100% - 100px) !important;
+        }
+        .chart-container {
+            height: 300px;
+        }
+    </style>
 </head>
 <body>
-    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
         <div class="container">
             <a class="navbar-brand" href="#">ShelfWise</a>
@@ -169,7 +184,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="login.php">Cerrar Sesión</a>
+                        <a class="nav-link" href="logout.php">Cerrar Sesión</a>
                     </li>
                 </ul>
             </div>
@@ -185,7 +200,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="card-body">
                         <h5 class="card-title">Libro más prestado</h5>
                         <p class="card-text">
-                            <?php echo $libro_mas_prestado['Titulo']; ?><br>
+                            <?php echo htmlspecialchars($libro_mas_prestado['Titulo']); ?><br>
                             Lectores: <?php echo $libro_mas_prestado['cantidad_lectores']; ?>
                         </p>
                     </div>
@@ -196,7 +211,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="card-body">
                         <h5 class="card-title">Libro más leído (2024)</h5>
                         <p class="card-text">
-                            <?php echo $libro_mas_leido_rango['Titulo']; ?><br>
+                            <?php echo htmlspecialchars($libro_mas_leido_rango['Titulo']); ?><br>
                             Lectores: <?php echo $libro_mas_leido_rango['cantidad_lectores']; ?>
                         </p>
                     </div>
@@ -207,7 +222,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="card-body">
                         <h5 class="card-title">Préstamos del libro más popular (2024)</h5>
                         <p class="card-text">
-                            <?php echo $veces_prestado_libro['Titulo']; ?><br>
+                            <?php echo htmlspecialchars($veces_prestado_libro['Titulo']); ?><br>
                             Préstamos: <?php echo $veces_prestado_libro['cantidad_prestamos']; ?>
                         </p>
                     </div>
@@ -220,7 +235,9 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Libros y número de lectores</h5>
-                        <canvas id="librosLectoresChart"></canvas>
+                        <div class="chart-container">
+                            <canvas id="librosLectoresChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -228,8 +245,8 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Lectores y sus libros más leídos (2024)</h5>
-                        <div class="table-responsive">
-                            <table class="table table-striped">
+                        <div class="table-container">
+                            <table id="lectoresLibrosTable" class="table table-striped">
                                 <thead>
                                     <tr>
                                         <th>Lector</th>
@@ -258,8 +275,8 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Libros a devolver pronto</h5>
-                        <div class="table-responsive">
-                            <table class="table table-striped">
+                        <div class="table-container">
+                            <table id="librosDevolverTable" class="table table-striped">
                                 <thead>
                                     <tr>
                                         <th>Título</th>
@@ -283,8 +300,8 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Lectores con libros vencidos</h5>
-                        <div class="table-responsive">
-                            <table class="table table-striped">
+                        <div class="table-container">
+                            <table id="lectoresVencidosTable" class="table table-striped">
                                 <thead>
                                     <tr>
                                         <th>Lector</th>
@@ -307,8 +324,38 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/dataTables.bootstrap5.min.js"></script>
     <script>
+        $(document).ready(function() {
+            $('#lectoresLibrosTable').DataTable({
+                "language": {
+                    "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json"
+                },
+                "scrollY": "200px",
+                "scrollCollapse": true,
+                "paging": false
+            });
+            $('#librosDevolverTable').DataTable({
+                "language": {
+                    "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json"
+                },
+                "scrollY": "200px",
+                "scrollCollapse": true,
+                "paging": false
+            });
+            $('#lectoresVencidosTable').DataTable({
+                "language": {
+                    "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json"
+                },
+                "scrollY": "200px",
+                "scrollCollapse": true,
+                "paging": false
+            });
+        });
+
         // Gráfico de libros y número de lectores
         var ctx = document.getElementById('librosLectoresChart').getContext('2d');
         var chart = new Chart(ctx, {
@@ -328,7 +375,9 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     y: {
                         beginAtZero: true
                     }
-                }
+                },
+                maintainAspectRatio: false,
+                responsive: true
             }
         });
     </script>
