@@ -7,7 +7,8 @@ verificar_sesion();
 $id_admin = $_SESSION['usuario_id'];
 
 // Función para limpiar y validar los datos de entrada
-function limpiar_dato($dato) {
+function limpiar_dato($dato)
+{
     $dato = trim($dato);
     $dato = stripslashes($dato);
     $dato = htmlspecialchars($dato);
@@ -18,7 +19,8 @@ $mensaje = '';
 $error = '';
 
 // Función para obtener la cantidad total de un libro
-function obtener_cantidad_total($pdo, $libro_id) {
+function obtener_cantidad_total($pdo, $libro_id)
+{
     $sql = "SELECT Cantidad_Libro FROM Libro WHERE idLibro = ?";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$libro_id]);
@@ -27,15 +29,16 @@ function obtener_cantidad_total($pdo, $libro_id) {
 }
 
 // Función para obtener la cantidad prestada de un libro
-function obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id = null) {
+function obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id = null)
+{
     $sql = "SELECT SUM(Cantidad) AS total_prestado FROM Detalle_Prestamo WHERE Libro_idLibro = ?";
     $params = [$libro_id];
-    
+
     if ($prestamo_actual_id) {
         $sql .= " AND Prestamo_id_Prestamo != ?";
         $params[] = $prestamo_actual_id;
     }
-    
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -43,7 +46,8 @@ function obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id = null) 
 }
 
 // Función para obtener la cantidad disponible de un libro
-function obtener_cantidad_disponible($pdo, $libro_id, $prestamo_actual_id = null) {
+function obtener_cantidad_disponible($pdo, $libro_id, $prestamo_actual_id = null)
+{
     $cantidad_total = obtener_cantidad_total($pdo, $libro_id);
     $cantidad_prestada = obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id);
     return $cantidad_total - $cantidad_prestada;
@@ -197,7 +201,8 @@ try {
 }
 
 // Función para obtener detalles de un préstamo
-function obtener_detalles_prestamo($pdo, $id_prestamo) {
+function obtener_detalles_prestamo($pdo, $id_prestamo)
+{
     $sql = "SELECT dp.*, l.Titulo FROM Detalle_Prestamo dp
             JOIN Libro l ON dp.Libro_idLibro = l.idLibro
             WHERE dp.Prestamo_id_Prestamo = ?";
@@ -209,6 +214,7 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
 
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -218,6 +224,7 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
+
 <body class="p-0">
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
@@ -228,6 +235,9 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="dashboard.php">Dashboard</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="lectores.php">Lectores</a>
                     </li>
@@ -278,10 +288,10 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                                     <td><?php echo $prestamo['Fecha_Prestamo']; ?></td>
                                     <td><?php echo $prestamo['Fecha_Devolucion']; ?></td>
                                     <td>
-                                        <button class="btn btn-warning btn-sm editar-prestamo" data-bs-toggle="modal" data-bs-target="#prestamoModal" 
-                                                data-prestamo='<?php echo json_encode($prestamo); ?>'>Editar</button>
-                                        <button class="btn btn-danger btn-sm eliminar-prestamo" 
-                                                data-id="<?php echo $prestamo['id_Prestamo']; ?>">Eliminar</button>
+                                        <button class="btn btn-warning btn-sm editar-prestamo" data-bs-toggle="modal" data-bs-target="#prestamoModal"
+                                            data-prestamo='<?php echo json_encode($prestamo); ?>'>Editar</button>
+                                        <button class="btn btn-danger btn-sm eliminar-prestamo"
+                                            data-id="<?php echo $prestamo['id_Prestamo']; ?>">Eliminar</button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -455,12 +465,14 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                     document.getElementById('lector_id').value = prestamo.Lector_idLector;
                     document.getElementById('fecha_prestamo').value = prestamo.Fecha_Prestamo;
                     document.getElementById('fecha_devolucion').value = prestamo.Fecha_Devolucion;
-                    
+
                     // Cargar los libros y cantidades del préstamo
                     $.ajax({
                         url: 'get_prestamo_details.php',
                         method: 'GET',
-                        data: { id_prestamo: prestamo.id_Prestamo },
+                        data: {
+                            id_prestamo: prestamo.id_Prestamo
+                        },
                         dataType: 'json',
                         success: function(response) {
                             librosPrestadosTabla.innerHTML = '';
@@ -524,4 +536,5 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
         });
     </script>
 </body>
+
 </html>

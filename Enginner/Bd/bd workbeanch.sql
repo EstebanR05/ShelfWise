@@ -40,7 +40,7 @@ CREATE TABLE `shelfwise`.`Rol` (
 );
 
 CREATE TABLE `shelfwise`.`Administrador` (
-  `Id_Administrador` INT NOT NULL,
+  `Id_Administrador` INT NOT NULL AUTO_INCREMENT,
   `Primer_Nombre` VARCHAR(45) NOT NULL,
   `Segundo_Nombre` VARCHAR(45) NULL,
   `Primer_Apellido` VARCHAR(45) NOT NULL,
