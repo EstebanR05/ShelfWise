@@ -17,8 +17,8 @@ function limpiar_dato($dato) {
 $mensaje = '';
 $error = '';
 
-// Función para obtener la cantidad disponible de un libro
-function obtener_cantidad_disponible($pdo, $libro_id) {
+// Función para obtener la cantidad total de un libro
+function obtener_cantidad_total($pdo, $libro_id) {
     $sql = "SELECT Cantidad_Libro FROM Libro WHERE idLibro = ?";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$libro_id]);
@@ -27,12 +27,26 @@ function obtener_cantidad_disponible($pdo, $libro_id) {
 }
 
 // Función para obtener la cantidad prestada de un libro
-function obtener_cantidad_prestada($pdo, $libro_id) {
-    $sql = "SELECT SUM(CAST(Cantidad AS UNSIGNED)) AS total_prestado FROM Detalle_Prestamo WHERE Libro_idLibro = ?";
+function obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id = null) {
+    $sql = "SELECT SUM(Cantidad) AS total_prestado FROM Detalle_Prestamo WHERE Libro_idLibro = ?";
+    $params = [$libro_id];
+    
+    if ($prestamo_actual_id) {
+        $sql .= " AND Prestamo_id_Prestamo != ?";
+        $params[] = $prestamo_actual_id;
+    }
+    
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([$libro_id]);
+    $stmt->execute($params);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result ? intval($result['total_prestado']) : 0;
+}
+
+// Función para obtener la cantidad disponible de un libro
+function obtener_cantidad_disponible($pdo, $libro_id, $prestamo_actual_id = null) {
+    $cantidad_total = obtener_cantidad_total($pdo, $libro_id);
+    $cantidad_prestada = obtener_cantidad_prestada($pdo, $libro_id, $prestamo_actual_id);
+    return $cantidad_total - $cantidad_prestada;
 }
 
 // Crear o actualizar préstamo
@@ -50,13 +64,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $libros_validos = true;
         foreach ($libros as $index => $libro_id) {
             $cantidad_solicitada = intval($cantidades[$index]);
-            $cantidad_disponible = obtener_cantidad_disponible($pdo, $libro_id);
-            $cantidad_prestada = obtener_cantidad_prestada($pdo, $libro_id);
-            $cantidad_real_disponible = $cantidad_disponible - $cantidad_prestada;
+            $cantidad_disponible = obtener_cantidad_disponible($pdo, $libro_id, $id_prestamo);
 
-            if ($cantidad_solicitada > $cantidad_real_disponible) {
+            if ($cantidad_solicitada > $cantidad_disponible) {
                 $libros_validos = false;
-                $error = "No hay suficientes ejemplares disponibles del libro con ID $libro_id.";
+                $error = "No hay suficientes ejemplares disponibles del libro con ID $libro_id. Disponibles: $cantidad_disponible";
                 break;
             }
         }
@@ -286,13 +298,16 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                         </div>
                         <div class="mb-3">
                             <label for="libros" class="form-label">Libros</label>
-                            <select class="form-select" id="libros" name="libros[]" multiple required>
+                            <select class="form-select" id="libros" name="libros[]" multiple>
                                 <?php foreach ($libros as $libro): ?>
                                     <option value="<?php echo $libro['idLibro']; ?>" data-cantidad="<?php echo $libro['Cantidad_Libro']; ?>">
-                                        <?php echo $libro['Titulo']; ?> (Disponibles: <?php echo $libro['Cantidad_Libro']; ?>)
+                                        <?php echo $libro['Titulo']; ?> (Total: <?php echo $libro['Cantidad_Libro']; ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                        <div id="libros-prestados-container" class="mb-3">
+                            <!-- Aquí se mostrarán los libros prestados -->
                         </div>
                         <div id="cantidades-container"></div>
                     </form>
@@ -315,6 +330,7 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
             var modalTitle = document.getElementById('prestamoModalLabel');
             var librosSelect = document.getElementById('libros');
             var cantidadesContainer = document.getElementById('cantidades-container');
+            var librosPrestadosContainer = document.getElementById('libros-prestados-container');
 
             // Inicializar Select2 para el dropdown de libros
             $('#libros').select2({
@@ -326,19 +342,57 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
             // Manejar la selección de libros
             $('#libros').on('change', function() {
                 var selectedLibros = $(this).val();
+                actualizarCantidadesContainer(selectedLibros);
+            });
+
+            function actualizarCantidadesContainer(selectedLibros) {
                 cantidadesContainer.innerHTML = '';
                 selectedLibros.forEach(function(libroId) {
                     var libroOption = $('#libros option[value="' + libroId + '"]');
                     var libroTitulo = libroOption.text();
-                    var cantidadDisponible = libroOption.data('cantidad');
                     cantidadesContainer.innerHTML += `
                         <div class="mb-3">
                             <label for="cantidad_${libroId}" class="form-label">Cantidad para "${libroTitulo}"</label>
-                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" max="${cantidadDisponible}" required>
+                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" required>
                         </div>
                     `;
                 });
-            });
+            }
+
+            function actualizarLibrosPrestados(detalles) {
+                librosPrestadosContainer.innerHTML = '<h6>Libros prestados:</h6>';
+                detalles.forEach(function(detalle) {
+                    librosPrestadosContainer.innerHTML += `
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <span>${detalle.Titulo} (Cantidad: ${detalle.Cantidad})</span>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-warning editar-libro-prestado" data-libro-id="${detalle.Libro_idLibro}" data-cantidad="${detalle.Cantidad}">Editar</button>
+                                <button type="button" class="btn btn-sm btn-danger eliminar-libro-prestado" data-libro-id="${detalle.Libro_idLibro}">Eliminar</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                // Agregar eventos a los botones de editar y eliminar
+                document.querySelectorAll('.editar-libro-prestado').forEach(button => {
+                    button.addEventListener('click', function() {
+                        var libroId = this.getAttribute('data-libro-id');
+                        var cantidad = this.getAttribute('data-cantidad');
+                        $('#libros').val(libroId).trigger('change');
+                        setTimeout(() => {
+                            document.getElementById(`cantidad_${libroId}`).value = cantidad;
+                        }, 100);
+                    });
+                });
+
+                document.querySelectorAll('.eliminar-libro-prestado').forEach(button => {
+                    button.addEventListener('click', function() {
+                        var libroId = this.getAttribute('data-libro-id');
+                        $('#libros option[value="' + libroId + '"]').prop('selected', false);
+                        $('#libros').trigger('change');
+                    });
+                });
+            }
 
             prestamoModal.addEventListener('show.bs.modal', function(event) {
                 var button = event.relatedTarget;
@@ -368,6 +422,8 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                                     $('#cantidad_' + item.Libro_idLibro).val(item.Cantidad);
                                 });
                             }, 100);
+
+                            actualizarLibrosPrestados(response);
                         },
                         error: function(xhr, status, error) {
                             console.error("Error al cargar los detalles del préstamo:", error);
@@ -379,6 +435,7 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                     document.getElementById('id_prestamo').value = '';
                     $('#libros').val(null).trigger('change');
                     cantidadesContainer.innerHTML = '';
+                    librosPrestadosContainer.innerHTML = '';
                 }
             });
 
