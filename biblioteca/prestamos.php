@@ -98,7 +98,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // Actualizar detalles del préstamo
                 $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
                         VALUES (?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE Cantidad = Cantidad + VALUES(Cantidad)";
+                        ON DUPLICATE KEY UPDATE Cantidad = VALUES(Cantidad)";
                 $stmt = $pdo->prepare($sql);
 
                 foreach ($libros as $index => $libro_id) {
@@ -322,7 +322,8 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                         </div>
                         <div class="mb-3">
                             <label for="libros" class="form-label">Libros</label>
-                            <select class="form-select" id="libros" name="libros[]" multiple>
+                            <select class="form-select" id="libros" name="libros[]">
+                                <option value="">Seleccione un libro</option>
                                 <?php foreach ($libros as $libro): ?>
                                     <option value="<?php echo $libro['idLibro']; ?>" data-cantidad="<?php echo $libro['Cantidad_Disponible']; ?>">
                                         <?php echo $libro['Titulo']; ?> (Disponibles: <?php echo $libro['Cantidad_Disponible']; ?>)
@@ -330,10 +331,20 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div id="libros-prestados-container" class="mb-3">
-                            <!-- Aquí se mostrarán los libros prestados -->
+                        <div class="mb-3">
+                            <table class="table table-bordered" id="libros-prestados-tabla">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre del Libro</th>
+                                        <th>Cantidad</th>
+                                        <th>Opciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Aquí se agregarán dinámicamente las filas de libros prestados -->
+                                </tbody>
+                            </table>
                         </div>
-                        <div id="cantidades-container"></div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -353,73 +364,84 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
             var prestamoForm = document.getElementById('prestamoForm');
             var modalTitle = document.getElementById('prestamoModalLabel');
             var librosSelect = document.getElementById('libros');
-            var cantidadesContainer = document.getElementById('cantidades-container');
-            var librosPrestadosContainer = document.getElementById('libros-prestados-container');
+            var librosPrestadosTabla = document.getElementById('libros-prestados-tabla').getElementsByTagName('tbody')[0];
 
             // Inicializar Select2 para el dropdown de libros
             $('#libros').select2({
-                placeholder: 'Seleccione los libros',
+                placeholder: 'Seleccione un libro',
                 allowClear: true,
                 dropdownParent: $('#prestamoModal')
             });
 
             // Manejar la selección de libros
             $('#libros').on('change', function() {
-                var selectedLibros = $(this).val();
-                actualizarCantidadesContainer(selectedLibros);
+                var selectedLibro = $(this).find('option:selected');
+                var libroId = selectedLibro.val();
+                var libroTitulo = selectedLibro.text().split('(')[0].trim();
+                var cantidadDisponible = parseInt(selectedLibro.data('cantidad'));
+
+                if (libroId) {
+                    agregarLibroPrestado(libroId, libroTitulo, cantidadDisponible);
+                    $(this).val('').trigger('change');
+                }
             });
 
-            function actualizarCantidadesContainer(selectedLibros) {
-                cantidadesContainer.innerHTML = '';
-                selectedLibros.forEach(function(libroId) {
-                    var libroOption = $('#libros option[value="' + libroId + '"]');
-                    var libroTitulo = libroOption.text();
-                    var cantidadDisponible = parseInt(libroOption.data('cantidad'));
-                    var cantidadActual = parseInt($('#cantidad_' + libroId).val()) || 0;
-                    var maxCantidad = cantidadDisponible + cantidadActual;
-                    cantidadesContainer.innerHTML += `
-                        <div class="mb-3">
-                            <label for="cantidad_${libroId}" class="form-label">Cantidad para "${libroTitulo}"</label>
-                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="${cantidadActual}" min="1" max="${maxCantidad}" required>
-                            <small class="form-text text-muted">Máximo disponible: ${maxCantidad}</small>
-                        </div>
-                    `;
+            function agregarLibroPrestado(libroId, libroTitulo, cantidadDisponible) {
+                var newRow = librosPrestadosTabla.insertRow();
+                newRow.innerHTML = `
+                    <td>${libroTitulo}</td>
+                    <td>
+                        <input type="number" name="cantidades[]" value="1" min="1" max="${cantidadDisponible}" class="form-control cantidad-input" required disabled>
+                        <input type="hidden" name="libros[]" value="${libroId}">
+                        <small class="text-muted">Disponibles: <span class="cantidad-disponible">${cantidadDisponible}</span></small>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-warning btn-sm editar-libro">Editar</button>
+                        <button type="button" class="btn btn-danger btn-sm eliminar-libro">Eliminar</button>
+                    </td>
+                `;
+
+                newRow.querySelector('.editar-libro').addEventListener('click', function() {
+                    editarLibroPrestado(this);
                 });
+
+                newRow.querySelector('.eliminar-libro').addEventListener('click', function() {
+                    eliminarLibroPrestado(this);
+                });
+
+                actualizarCantidadDisponible(newRow);
             }
 
-            function actualizarLibrosPrestados(detalles) {
-                librosPrestadosContainer.innerHTML = '<h6>Libros prestados:</h6>';
-                detalles.forEach(function(detalle) {
-                    librosPrestadosContainer.innerHTML += `
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                            <span>${detalle.Titulo} (Cantidad: ${detalle.Cantidad})</span>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-warning editar-libro-prestado" data-libro-id="${detalle.Libro_idLibro}" data-cantidad="${detalle.Cantidad}">Editar</button>
-                                <button type="button" class="btn btn-sm btn-danger eliminar-libro-prestado" data-libro-id="${detalle.Libro_idLibro}">Eliminar</button>
-                            </div>
-                        </div>
-                    `;
-                });
+            function editarLibroPrestado(button) {
+                var row = button.closest('tr');
+                var cantidadInput = row.querySelector('.cantidad-input');
+                var editarButton = row.querySelector('.editar-libro');
+                var eliminarButton = row.querySelector('.eliminar-libro');
 
-                // Agregar eventos a los botones de editar y eliminar
-                document.querySelectorAll('.editar-libro-prestado').forEach(button => {
-                    button.addEventListener('click', function() {
-                        var libroId = this.getAttribute('data-libro-id');
-                        var cantidad = this.getAttribute('data-cantidad');
-                        $('#libros').val(libroId).trigger('change');
-                        setTimeout(() => {
-                            document.getElementById(`cantidad_${libroId}`).value = cantidad;
-                        }, 100);
-                    });
-                });
+                if (cantidadInput.disabled) {
+                    cantidadInput.disabled = false;
+                    editarButton.textContent = 'Guardar';
+                    eliminarButton.style.display = 'none';
+                } else {
+                    cantidadInput.disabled = true;
+                    editarButton.textContent = 'Editar';
+                    eliminarButton.style.display = 'inline-block';
+                    actualizarCantidadDisponible(row);
+                }
+            }
 
-                document.querySelectorAll('.eliminar-libro-prestado').forEach(button => {
-                    button.addEventListener('click', function() {
-                        var libroId = this.getAttribute('data-libro-id');
-                        $('#libros option[value="' + libroId + '"]').prop('selected', false);
-                        $('#libros').trigger('change');
-                    });
-                });
+            function eliminarLibroPrestado(button) {
+                var row = button.closest('tr');
+                row.remove();
+            }
+
+            function actualizarCantidadDisponible(row) {
+                var cantidadInput = row.querySelector('.cantidad-input');
+                var cantidadDisponibleSpan = row.querySelector('.cantidad-disponible');
+                var cantidadTotal = parseInt(cantidadInput.max);
+                var cantidadPrestada = parseInt(cantidadInput.value);
+                var cantidadDisponible = cantidadTotal - cantidadPrestada;
+                cantidadDisponibleSpan.textContent = cantidadDisponible;
             }
 
             prestamoModal.addEventListener('show.bs.modal', function(event) {
@@ -441,17 +463,13 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                         data: { id_prestamo: prestamo.id_Prestamo },
                         dataType: 'json',
                         success: function(response) {
-                            var librosIds = response.map(function(item) { return item.Libro_idLibro.toString(); });
-                            $('#libros').val(librosIds).trigger('change');
-                            
-                            // Esperar a que se generen los campos de cantidad
-                            setTimeout(function() {
-                                response.forEach(function(item) {
-                                    $('#cantidad_' + item.Libro_idLibro).val(item.Cantidad);
-                                });
-                            }, 100);
-
-                            actualizarLibrosPrestados(response);
+                            librosPrestadosTabla.innerHTML = '';
+                            response.forEach(function(detalle) {
+                                agregarLibroPrestado(detalle.Libro_idLibro, detalle.Titulo, detalle.Cantidad_Disponible + parseInt(detalle.Cantidad));
+                                var lastRow = librosPrestadosTabla.rows[librosPrestadosTabla.rows.length - 1];
+                                lastRow.querySelector('.cantidad-input').value = detalle.Cantidad;
+                                actualizarCantidadDisponible(lastRow);
+                            });
                         },
                         error: function(xhr, status, error) {
                             console.error("Error al cargar los detalles del préstamo:", error);
@@ -462,8 +480,7 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                     prestamoForm.reset();
                     document.getElementById('id_prestamo').value = '';
                     $('#libros').val(null).trigger('change');
-                    cantidadesContainer.innerHTML = '';
-                    librosPrestadosContainer.innerHTML = '';
+                    librosPrestadosTabla.innerHTML = '';
                 }
             });
 
