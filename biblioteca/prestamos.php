@@ -165,7 +165,11 @@ try {
 
 // Obtener lista de libros para el dropdown
 try {
-    $sql = "SELECT idLibro, Titulo, Cantidad_Libro FROM Libro";
+    $sql = "SELECT l.idLibro, l.Titulo, l.Cantidad_Libro, 
+            (l.Cantidad_Libro - COALESCE(SUM(dp.Cantidad), 0)) AS Cantidad_Disponible
+            FROM Libro l
+            LEFT JOIN Detalle_Prestamo dp ON l.idLibro = dp.Libro_idLibro
+            GROUP BY l.idLibro, l.Titulo, l.Cantidad_Libro";
     $stmt = $pdo->query($sql);
     $libros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -300,8 +304,8 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                             <label for="libros" class="form-label">Libros</label>
                             <select class="form-select" id="libros" name="libros[]" multiple>
                                 <?php foreach ($libros as $libro): ?>
-                                    <option value="<?php echo $libro['idLibro']; ?>" data-cantidad="<?php echo $libro['Cantidad_Libro']; ?>">
-                                        <?php echo $libro['Titulo']; ?> (Total: <?php echo $libro['Cantidad_Libro']; ?>)
+                                    <option value="<?php echo $libro['idLibro']; ?>" data-cantidad="<?php echo $libro['Cantidad_Disponible']; ?>">
+                                        <?php echo $libro['Titulo']; ?> (Disponibles: <?php echo $libro['Cantidad_Disponible']; ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -350,10 +354,11 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                 selectedLibros.forEach(function(libroId) {
                     var libroOption = $('#libros option[value="' + libroId + '"]');
                     var libroTitulo = libroOption.text();
+                    var cantidadDisponible = libroOption.data('cantidad');
                     cantidadesContainer.innerHTML += `
                         <div class="mb-3">
                             <label for="cantidad_${libroId}" class="form-label">Cantidad para "${libroTitulo}"</label>
-                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" required>
+                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" max="${cantidadDisponible}" required>
                         </div>
                     `;
                 });
