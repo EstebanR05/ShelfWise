@@ -62,11 +62,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $pdo->beginTransaction();
 
         $libros_validos = true;
+        $cantidades_actuales = [];
+
+        if ($id_prestamo) {
+            // Obtener cantidades actuales para el préstamo existente
+            $sql = "SELECT Libro_idLibro, Cantidad FROM Detalle_Prestamo WHERE Prestamo_id_Prestamo = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$id_prestamo]);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cantidades_actuales[$row['Libro_idLibro']] = $row['Cantidad'];
+            }
+        }
+
         foreach ($libros as $index => $libro_id) {
             $cantidad_solicitada = intval($cantidades[$index]);
+            $cantidad_actual = isset($cantidades_actuales[$libro_id]) ? $cantidades_actuales[$libro_id] : 0;
+            $cantidad_adicional = $cantidad_solicitada - $cantidad_actual;
             $cantidad_disponible = obtener_cantidad_disponible($pdo, $libro_id, $id_prestamo);
 
-            if ($cantidad_solicitada > $cantidad_disponible) {
+            if ($cantidad_adicional > $cantidad_disponible) {
                 $libros_validos = false;
                 $error = "No hay suficientes ejemplares disponibles del libro con ID $libro_id. Disponibles: $cantidad_disponible";
                 break;
@@ -81,10 +95,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_prestamo, $id_admin]);
 
-                // Eliminar detalles anteriores
-                $sql = "DELETE FROM Detalle_Prestamo WHERE Prestamo_id_Prestamo = ?";
+                // Actualizar detalles del préstamo
+                $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
+                        VALUES (?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE Cantidad = Cantidad + VALUES(Cantidad)";
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute([$id_prestamo]);
+
+                foreach ($libros as $index => $libro_id) {
+                    $cantidad = $cantidades[$index];
+                    $stmt->execute([$libro_id, $id_prestamo, $lector_id, $id_admin, $cantidad]);
+                }
 
                 $mensaje = "Préstamo actualizado exitosamente.";
             } else {
@@ -95,17 +115,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_admin]);
                 $id_prestamo = $pdo->lastInsertId();
 
+                // Insertar detalles del préstamo
+                $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
+                        VALUES (?, ?, ?, ?, ?)";
+                $stmt = $pdo->prepare($sql);
+
+                foreach ($libros as $index => $libro_id) {
+                    $cantidad = $cantidades[$index];
+                    $stmt->execute([$libro_id, $id_prestamo, $lector_id, $id_admin, $cantidad]);
+                }
+
                 $mensaje = "Préstamo creado exitosamente.";
-            }
-
-            // Insertar detalles del préstamo
-            $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
-                    VALUES (?, ?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-
-            foreach ($libros as $index => $libro_id) {
-                $cantidad = $cantidades[$index];
-                $stmt->execute([$libro_id, $id_prestamo, $lector_id, $id_admin, $cantidad]);
             }
 
             $pdo->commit();
@@ -354,11 +374,14 @@ function obtener_detalles_prestamo($pdo, $id_prestamo) {
                 selectedLibros.forEach(function(libroId) {
                     var libroOption = $('#libros option[value="' + libroId + '"]');
                     var libroTitulo = libroOption.text();
-                    var cantidadDisponible = libroOption.data('cantidad');
+                    var cantidadDisponible = parseInt(libroOption.data('cantidad'));
+                    var cantidadActual = parseInt($('#cantidad_' + libroId).val()) || 0;
+                    var maxCantidad = cantidadDisponible + cantidadActual;
                     cantidadesContainer.innerHTML += `
                         <div class="mb-3">
                             <label for="cantidad_${libroId}" class="form-label">Cantidad para "${libroTitulo}"</label>
-                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" max="${cantidadDisponible}" required>
+                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="${cantidadActual}" min="1" max="${maxCantidad}" required>
+                            <small class="form-text text-muted">Máximo disponible: ${maxCantidad}</small>
                         </div>
                     `;
                 });

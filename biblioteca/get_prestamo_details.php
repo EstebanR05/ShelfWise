@@ -7,11 +7,11 @@ if (isset($_GET['id_prestamo'])) {
     $id_prestamo = $_GET['id_prestamo'];
     
     try {
-        $sql = "SELECT dp.*, l.Titulo, 
-                (l.Cantidad_Libro - COALESCE(SUM(dp2.Cantidad), 0) + dp.Cantidad) AS Cantidad_Disponible
+        $sql = "SELECT dp.*, l.Titulo, l.Cantidad_Libro,
+                (l.Cantidad_Libro - COALESCE(SUM(CASE WHEN dp2.Prestamo_id_Prestamo != dp.Prestamo_id_Prestamo THEN dp2.Cantidad ELSE 0 END), 0)) AS Cantidad_Disponible
                 FROM Detalle_Prestamo dp
                 JOIN Libro l ON dp.Libro_idLibro = l.idLibro
-                LEFT JOIN Detalle_Prestamo dp2 ON l.idLibro = dp2.Libro_idLibro AND dp2.Prestamo_id_Prestamo != dp.Prestamo_id_Prestamo
+                LEFT JOIN Detalle_Prestamo dp2 ON l.idLibro = dp2.Libro_idLibro
                 WHERE dp.Prestamo_id_Prestamo = ?
                 GROUP BY dp.Libro_idLibro, dp.Cantidad, l.Titulo, l.Cantidad_Libro";
         $stmt = $pdo->prepare($sql);
