@@ -78,7 +78,7 @@ try {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
-<body>
+<body class="p-0">
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
         <div class="container">
@@ -106,7 +106,7 @@ try {
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="logout.php">Cerrar Sesión</a>
+                        <a class="nav-link" href="login.php">Cerrar Sesión</a>
                     </li>
                 </ul>
             </div>

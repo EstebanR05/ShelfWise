@@ -17,6 +17,24 @@ function limpiar_dato($dato) {
 $mensaje = '';
 $error = '';
 
+// Función para obtener la cantidad disponible de un libro
+function obtener_cantidad_disponible($pdo, $libro_id) {
+    $sql = "SELECT Cantidad_Libro FROM Libro WHERE idLibro = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$libro_id]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? intval($result['Cantidad_Libro']) : 0;
+}
+
+// Función para obtener la cantidad prestada de un libro
+function obtener_cantidad_prestada($pdo, $libro_id) {
+    $sql = "SELECT SUM(CAST(Cantidad AS UNSIGNED)) AS total_prestado FROM Detalle_Prestamo WHERE Libro_idLibro = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$libro_id]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? intval($result['total_prestado']) : 0;
+}
+
 // Crear o actualizar préstamo
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $id_prestamo = isset($_POST['id_prestamo']) ? $_POST['id_prestamo'] : null;
@@ -29,41 +47,59 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     try {
         $pdo->beginTransaction();
 
-        if ($id_prestamo) {
-            // Actualizar préstamo
-            $sql = "UPDATE Prestamo SET Fecha_Prestamo = ?, Fecha_Devolucion = ?, Lector_idLector = ? 
-                    WHERE id_Prestamo = ? AND Administrador_Id_Administrador = ?";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_prestamo, $id_admin]);
-
-            // Eliminar detalles anteriores
-            $sql = "DELETE FROM Detalle_Prestamo WHERE Prestamo_id_Prestamo = ?";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$id_prestamo]);
-
-            $mensaje = "Préstamo actualizado exitosamente.";
-        } else {
-            // Crear préstamo
-            $sql = "INSERT INTO Prestamo (Fecha_Prestamo, Fecha_Devolucion, Lector_idLector, Administrador_Id_Administrador) 
-                    VALUES (?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_admin]);
-            $id_prestamo = $pdo->lastInsertId();
-
-            $mensaje = "Préstamo creado exitosamente.";
-        }
-
-        // Insertar detalles del préstamo
-        $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
-                VALUES (?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-
+        $libros_validos = true;
         foreach ($libros as $index => $libro_id) {
-            $cantidad = $cantidades[$index];
-            $stmt->execute([$libro_id, $id_prestamo, $lector_id, $id_admin, $cantidad]);
+            $cantidad_solicitada = intval($cantidades[$index]);
+            $cantidad_disponible = obtener_cantidad_disponible($pdo, $libro_id);
+            $cantidad_prestada = obtener_cantidad_prestada($pdo, $libro_id);
+            $cantidad_real_disponible = $cantidad_disponible - $cantidad_prestada;
+
+            if ($cantidad_solicitada > $cantidad_real_disponible) {
+                $libros_validos = false;
+                $error = "No hay suficientes ejemplares disponibles del libro con ID $libro_id.";
+                break;
+            }
         }
 
-        $pdo->commit();
+        if ($libros_validos) {
+            if ($id_prestamo) {
+                // Actualizar préstamo
+                $sql = "UPDATE Prestamo SET Fecha_Prestamo = ?, Fecha_Devolucion = ?, Lector_idLector = ? 
+                        WHERE id_Prestamo = ? AND Administrador_Id_Administrador = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_prestamo, $id_admin]);
+
+                // Eliminar detalles anteriores
+                $sql = "DELETE FROM Detalle_Prestamo WHERE Prestamo_id_Prestamo = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$id_prestamo]);
+
+                $mensaje = "Préstamo actualizado exitosamente.";
+            } else {
+                // Crear préstamo
+                $sql = "INSERT INTO Prestamo (Fecha_Prestamo, Fecha_Devolucion, Lector_idLector, Administrador_Id_Administrador) 
+                        VALUES (?, ?, ?, ?)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$fecha_prestamo, $fecha_devolucion, $lector_id, $id_admin]);
+                $id_prestamo = $pdo->lastInsertId();
+
+                $mensaje = "Préstamo creado exitosamente.";
+            }
+
+            // Insertar detalles del préstamo
+            $sql = "INSERT INTO Detalle_Prestamo (Libro_idLibro, Prestamo_id_Prestamo, Prestamo_Lector_idLector, Prestamo_Administrador_Id_Administrador, Cantidad) 
+                    VALUES (?, ?, ?, ?, ?)";
+            $stmt = $pdo->prepare($sql);
+
+            foreach ($libros as $index => $libro_id) {
+                $cantidad = $cantidades[$index];
+                $stmt->execute([$libro_id, $id_prestamo, $lector_id, $id_admin, $cantidad]);
+            }
+
+            $pdo->commit();
+        } else {
+            $pdo->rollBack();
+        }
     } catch (PDOException $e) {
         $pdo->rollBack();
         $error = "Error en la base de datos: " . $e->getMessage();
@@ -117,11 +153,21 @@ try {
 
 // Obtener lista de libros para el dropdown
 try {
-    $sql = "SELECT idLibro, Titulo FROM Libro";
+    $sql = "SELECT idLibro, Titulo, Cantidad_Libro FROM Libro";
     $stmt = $pdo->query($sql);
     $libros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $error = "Error al obtener libros: " . $e->getMessage();
+}
+
+// Función para obtener detalles de un préstamo
+function obtener_detalles_prestamo($pdo, $id_prestamo) {
+    $sql = "SELECT dp.*, l.Titulo FROM Detalle_Prestamo dp
+            JOIN Libro l ON dp.Libro_idLibro = l.idLibro
+            WHERE dp.Prestamo_id_Prestamo = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$id_prestamo]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -136,7 +182,7 @@ try {
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-<body>
+<body class="p-0">
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
         <div class="container">
@@ -161,7 +207,7 @@ try {
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="logout.php">Cerrar Sesión</a>
+                        <a class="nav-link" href="login.php">Cerrar Sesión</a>
                     </li>
                 </ul>
             </div>
@@ -242,7 +288,9 @@ try {
                             <label for="libros" class="form-label">Libros</label>
                             <select class="form-select" id="libros" name="libros[]" multiple required>
                                 <?php foreach ($libros as $libro): ?>
-                                    <option value="<?php echo $libro['idLibro']; ?>"><?php echo $libro['Titulo']; ?></option>
+                                    <option value="<?php echo $libro['idLibro']; ?>" data-cantidad="<?php echo $libro['Cantidad_Libro']; ?>">
+                                        <?php echo $libro['Titulo']; ?> (Disponibles: <?php echo $libro['Cantidad_Libro']; ?>)
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -280,11 +328,13 @@ try {
                 var selectedLibros = $(this).val();
                 cantidadesContainer.innerHTML = '';
                 selectedLibros.forEach(function(libroId) {
-                    var libroTitulo = $('#libros option[value="' + libroId + '"]').text();
+                    var libroOption = $('#libros option[value="' + libroId + '"]');
+                    var libroTitulo = libroOption.text();
+                    var cantidadDisponible = libroOption.data('cantidad');
                     cantidadesContainer.innerHTML += `
                         <div class="mb-3">
                             <label for="cantidad_${libroId}" class="form-label">Cantidad para "${libroTitulo}"</label>
-                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" required>
+                            <input type="number" class="form-control" id="cantidad_${libroId}" name="cantidades[]" value="1" min="1" max="${cantidadDisponible}" required>
                         </div>
                     `;
                 });
@@ -303,8 +353,26 @@ try {
                     document.getElementById('fecha_devolucion').value = prestamo.Fecha_Devolucion;
                     
                     // Cargar los libros y cantidades del préstamo
-                    // Aquí deberías hacer una llamada AJAX para obtener los detalles del préstamo
-                    // y luego actualizar el select de libros y los campos de cantidad
+                    $.ajax({
+                        url: 'get_prestamo_details.php',
+                        method: 'GET',
+                        data: { id_prestamo: prestamo.id_Prestamo },
+                        dataType: 'json',
+                        success: function(response) {
+                            var librosIds = response.map(function(item) { return item.Libro_idLibro.toString(); });
+                            $('#libros').val(librosIds).trigger('change');
+                            
+                            // Esperar a que se generen los campos de cantidad
+                            setTimeout(function() {
+                                response.forEach(function(item) {
+                                    $('#cantidad_' + item.Libro_idLibro).val(item.Cantidad);
+                                });
+                            }, 100);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Error al cargar los detalles del préstamo:", error);
+                        }
+                    });
                 } else {
                     modalTitle.textContent = 'Agregar Préstamo';
                     prestamoForm.reset();

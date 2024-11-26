@@ -157,7 +157,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     </style>
 </head>
-<body>
+<body class="p-0">
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
         <div class="container">
             <a class="navbar-brand" href="#">ShelfWise</a>
@@ -184,7 +184,7 @@ $lectores_vencidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="logout.php">Cerrar Sesión</a>
+                        <a class="nav-link" href="login.php">Cerrar Sesión</a>
                     </li>
                 </ul>
             </div>
