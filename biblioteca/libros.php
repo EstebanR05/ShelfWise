@@ -102,6 +102,9 @@ try {
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
+                        <a class="nav-link active" href="dashboard.php">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="lectores.php">Lectores</a>
                     </li>
                     <li class="nav-item">
